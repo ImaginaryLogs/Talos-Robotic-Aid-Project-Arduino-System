@@ -44,6 +44,7 @@ Adafruit_PWMServoDriver ServoDriver = Adafruit_PWMServoDriver();
 #define SERVO_FREQ  50
 #define C_SERVOMIN  275
 #define C_SERVOMAX  442
+#define C_SERVOSTOP 359
 
 
 void setup() {
@@ -69,8 +70,11 @@ void loop() {
   if (DecState != oldDecState){
     if (DecState == HIGH & range > 0 ){
       Serial.println("Pressed Decrease");
-      range = range - 1;
-      
+      Motors[Interaction_State] = Motors[Interaction_State] - 1;
+      ServoDriver.setPWM(Interaction_State, 0, C_SERVOMAX);
+      delay(1000);
+      ServoDriver.setPWM(Interaction_State, 0, C_SERVOSTOP);
+
       delay(50);
     } else {
       Serial.println("Return of Key: Decrease");
@@ -82,7 +86,12 @@ void loop() {
   if (IncState != oldIncState){
     if (IncState == HIGH & range < 180 ){
       Serial.println("Pressed Increase");
-      range = range + 1;
+      Motors[Interaction_State] = Motors[Interaction_State] + 1;
+      ServoDriver.setPWM(Interaction_State, 0, C_SERVOMIN);
+      delay(1000);
+      ServoDriver.setPWM(Interaction_State, 0, C_SERVOSTOP);
+
+
       delay(50);
     } else {
       Serial.println("Return of Key: Increase");
@@ -93,43 +102,26 @@ void loop() {
 
   if (CMState != oldCMState){
     if (CMState == HIGH){
-      Serial.println("Action");
-      timer = oldrange - range;
-      if (timer > 0){
-        timer = timer * 100;
-        ServoDriver.setPWM(0,0,C_SERVOMAX);
-        ServoDriver.writeMicroseconds(0, timer);
-        delay(timer);
-        ServoDriver.setPWM(0,0,359);
-      } else if (timer < 0) {
-        timer = timer * -1 * 100;
-        ServoDriver.setPWM(0,0,C_SERVOMIN);
-        ServoDriver.writeMicroseconds(0, timer);
-        delay(timer);
-        ServoDriver.setPWM(0,0,359);
-      } 
-      timer = 0;
-      oldrange = range;
+      Serial.println("Pressed Change Mode");
+      Interaction_State = (Interaction_State + 1) % 3; 
+
+      //Print: LNB Number
+      for (int n = 0; n < 100; n++){
+      screenWrite(0, 19);
+      screenWrite(1, 20);
+      screenWrite(2, 11);
+      screenWrite(3, Interaction_State);
+    }
+
       delay (50);
+    } else {
+      Serial.println("Return of Key: Change Mode");
     }
   }
   oldCMState = CMState;
 
-  Serial.print("Angle: ");
-  Serial.print(range);
-  Serial.print("\n");
 
-  for (int n = 0; n <4; n++){
-    OutputProcessing01 = (range % (int)(pow(10,n+1)));
-    OutputProcessing02 = (range % (int)(pow(10,n)));
-    OutputProcessing03 = (int)((OutputProcessing01 - OutputProcessing02)/(int)(pow(10,n)));
-    Output[n] = OutputProcessing03;
-    // B = angle >> n + 1;
-    // C = B << n + 1;
-    // D = angle - C;
-    // D = D >> n;
-    //Output[n] = D;
-  }
+  int_to_individualDigits(Motors[Interaction_State]);
   
   for (int n = 0; n < 25; n++){
     screenWrite(0, Output[3]);
@@ -138,6 +130,7 @@ void loop() {
     screenWrite(3, Output[0]);
   }
 
+  
   delay(50);
 }
 
@@ -150,6 +143,34 @@ void shiftWrite(int ChipNumber, int Data){
 void clearDigit(int LatchNumber){                                               
   for(int n = 0; n < 8; n++){
     shiftWrite(LatchNumber, 0b00000000);
+  }
+}
+
+void int_to_individualDigits(int inputInteger){
+  int negativeFlag = 0;
+  if (inputInteger < 0){
+      inputInteger *= -1;
+      negativeFlag = 1;
+  }
+  for (int n = 0; n <4; n++){
+    OutputProcessing01 = (inputInteger % (int)(pow(10,n+1)));
+    OutputProcessing02 = (inputInteger % (int)(pow(10,n)));
+    OutputProcessing03 = (int)((OutputProcessing01 - OutputProcessing02)/(int)(pow(10,n)));
+
+
+    Output[n] = OutputProcessing03;
+    
+    
+    // B = angle >> n + 1;
+    // C = B << n + 1;
+    // D = angle - C;
+    // D = D >> n;
+    //Output[n] = D;
+  }
+  if (negativeFlag == 1){
+    Output[3] = 16;
+  } else{
+    Output[3] = 0;
   }
 }
 
@@ -176,9 +197,11 @@ int decimal_to_7segment(int x){
     case 15 : SegmentData = 0b01110001; break;
     // negative sign
     case 16 : SegmentData = 0b01000000; break;
-    // alphabets S and V
+    // alphabets S, V, L, N
     case 17 : SegmentData = 0b01110001; break;
-    case 18 : SegmentData = 0b01110001; break;
+    case 18 : SegmentData = 0b00111110; break;
+    case 19 : SegmentData = 0b00111000; break;
+    case 20 : SegmentData = 0b00110111; break;
     
 
     default : SegmentData = 0b01001001; break;
