@@ -7,17 +7,20 @@ const int DecreasePin = 6;
 const int IncreasePin = 7;
 const int ChangeModePin = 8;
 const int SaveModePin = 9;
+const int LoadModePin = A3;
 
 // InputState Data
 int DecState = 0;
 int IncState = 0;
 int CMState = 0;
 int SaveState = 0;
+int LoadState = 0;
 int oldDecState = 0;
 int oldIncState = 0;
 int oldCMState = 0;
 int oldSaveState = 0;
-
+int oldLoadState = 0;
+int distance = 0;
 
 // OutputState Data
 int Output[] = {0,0,0,0};
@@ -71,6 +74,7 @@ void loop() {
   IncState = digitalRead(IncreasePin);
   CMState = digitalRead(ChangeModePin);
   SaveState = digitalRead(SaveModePin);
+  LoadState = analogRead(LoadModePin);
   
 
   if (DecState != oldDecState){
@@ -78,12 +82,14 @@ void loop() {
       Serial.println("Pressed Decrease");
       Motors[Interaction_State][0] = Motors[Interaction_State][0] - 1;
       if (Interaction_State != 2){
+        ServoDriver.wakeup();
         ServoDriver.setPWM(Interaction_State, 0, C_SERVOMAX);
         delay(2000);
+    
         ServoDriver.setPWM(Interaction_State, 0, C_SERVOSTOP);
+        ServoDriver.sleep();
       } else {
         myStepper.step(-stepsPerRevolution*2);
-        delay(1000);
       }
 
       delay(50);
@@ -99,12 +105,13 @@ void loop() {
       Serial.println("Pressed Increase");
       Motors[Interaction_State][0] = Motors[Interaction_State][0] + 1;
       if (Interaction_State != 2){
+        ServoDriver.wakeup();
         ServoDriver.setPWM(Interaction_State, 0, C_SERVOMIN);
         delay(2000);
         ServoDriver.setPWM(Interaction_State, 0, C_SERVOSTOP);
+        ServoDriver.sleep();
       } else {
         myStepper.step(stepsPerRevolution*2);
-        delay(1000);
       }
       delay(50);
     } else {
@@ -139,6 +146,7 @@ void loop() {
       Serial.println("Pressed Save Mode");
       Motors[Interaction_State][1] = Motors[Interaction_State][0];
 
+      // Save Limb X
       for (int n = 0; n < 100; n++){
         screenWrite(0, 17);
         screenWrite(1, 10);
@@ -158,6 +166,49 @@ void loop() {
     }
   }
   oldSaveState = SaveState;
+  
+  if (LoadState > 500){
+    for (int n = 0; n < 4; n++){
+      distance = Motors[n][1] - Motors[n][0];
+      if (distance > 0){
+        if (n != 2){
+          ServoDriver.setPWM(n, 0, C_SERVOMAX);
+          delay(2000*distance);
+          ServoDriver.setPWM(n, 0, C_SERVOSTOP);
+        } else {
+          myStepper.step(stepsPerRevolution*2*distance);
+        }
+      } else if (distance < 0) {
+        if (n != 2){
+          ServoDriver.setPWM(n, 0, C_SERVOMIN);
+          delay(2000*distance*-1);
+          ServoDriver.setPWM(n, 0, C_SERVOSTOP);
+        } else {
+          myStepper.step(stepsPerRevolution*2*distance);
+        }
+      }
+    }
+    for (int n = 0; n < 4; n++){
+      distance = Motors[n][1] - Motors[n][0];
+      if (distance > 0){
+        if (n != 2){
+          ServoDriver.setPWM(n, 0, C_SERVOMIN);
+          delay(2000*distance*-1);
+          ServoDriver.setPWM(n, 0, C_SERVOSTOP);
+        } else {
+          myStepper.step(stepsPerRevolution*2*distance);
+        }
+      } else if (distance < 0) {
+        if (n != 2){
+          ServoDriver.setPWM(Interaction_State, 0, C_SERVOMAX);
+          delay(2000*distance);
+          ServoDriver.setPWM(Interaction_State, 0, C_SERVOSTOP);
+        } else {
+          myStepper.step(stepsPerRevolution*2*distance);
+        }
+      }
+    }
+  }
 
   int_to_individualDigits(Motors[Interaction_State][0]);
   
@@ -168,7 +219,6 @@ void loop() {
     screenWrite(3, Output[0]);
   }
 
-  
   delay(50);
 }
 
