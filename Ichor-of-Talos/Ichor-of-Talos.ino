@@ -6,6 +6,7 @@ const int Clock02Pin = 5;
 const int DecreasePin = 6;
 const int IncreasePin = 7;
 const int ChangeModePin = 8;
+const int SaveModePin = 9;
 
 // InputState Data
 int DecState = 0;
@@ -15,6 +16,7 @@ int SaveState = 0;
 int oldDecState = 0;
 int oldIncState = 0;
 int oldCMState = 0;
+int oldSaveState = 0;
 
 
 // OutputState Data
@@ -26,32 +28,35 @@ int OutputProcessing04 = 0;
 
 // Limb States
 // Measured in seconds
-int Limb_Alpha = 0;
-int Limb_Beta = 0;
-int Limb_Gamma = 0;
 int Interaction_State = 0;
-int Motors[] = {Limb_Alpha, Limb_Beta, Limb_Gamma};
+int Motors[4][2] = {{0,0}, {0,0}, {0,0}, {0,0}};
 
 
 int range = 90;
 int oldrange = range;
 int timer = 0;
 
-// servo definitions
+// Motor definitions
 #include <Wire.h>
 #include <Adafruit_PWMServoDriver.h>
-Adafruit_PWMServoDriver ServoDriver = Adafruit_PWMServoDriver();
-#define SERVO_FREQ  50
-#define C_SERVOMIN  275
-#define C_SERVOMAX  442
-#define C_SERVOSTOP 359
+#include <Stepper.h>
 
+const int SERVO_FREQ = 50;
+const int C_SERVOMIN = 275;
+const int C_SERVOMAX = 442;
+const int C_SERVOSTOP = 359;
+
+const int stepsPerRevolution = 200;
+
+Adafruit_PWMServoDriver ServoDriver = Adafruit_PWMServoDriver();
+Stepper myStepper(stepsPerRevolution, 10, 11, 12, 13);
 
 void setup() {
   // put your setup code here, to run once:
   Serial.begin(9600);
   ServoDriver.begin();
   ServoDriver.setPWMFreq(60);
+  myStepper.setSpeed(60);
   for (int n = 2; n < 6; n += 1){
     pinMode(n, OUTPUT);
   }
@@ -65,15 +70,21 @@ void loop() {
   DecState = digitalRead(DecreasePin);
   IncState = digitalRead(IncreasePin);
   CMState = digitalRead(ChangeModePin);
+  SaveState = digitalRead(SaveModePin);
   
 
   if (DecState != oldDecState){
     if (DecState == HIGH & range > 0 ){
       Serial.println("Pressed Decrease");
-      Motors[Interaction_State] = Motors[Interaction_State] - 1;
-      ServoDriver.setPWM(Interaction_State, 0, C_SERVOMAX);
-      delay(1000);
-      ServoDriver.setPWM(Interaction_State, 0, C_SERVOSTOP);
+      Motors[Interaction_State][0] = Motors[Interaction_State][0] - 1;
+      if (Interaction_State != 2){
+        ServoDriver.setPWM(Interaction_State, 0, C_SERVOMAX);
+        delay(2000);
+        ServoDriver.setPWM(Interaction_State, 0, C_SERVOSTOP);
+      } else {
+        myStepper.step(-stepsPerRevolution*2);
+        delay(1000);
+      }
 
       delay(50);
     } else {
@@ -86,12 +97,15 @@ void loop() {
   if (IncState != oldIncState){
     if (IncState == HIGH & range < 180 ){
       Serial.println("Pressed Increase");
-      Motors[Interaction_State] = Motors[Interaction_State] + 1;
-      ServoDriver.setPWM(Interaction_State, 0, C_SERVOMIN);
-      delay(1000);
-      ServoDriver.setPWM(Interaction_State, 0, C_SERVOSTOP);
-
-
+      Motors[Interaction_State][0] = Motors[Interaction_State][0] + 1;
+      if (Interaction_State != 2){
+        ServoDriver.setPWM(Interaction_State, 0, C_SERVOMIN);
+        delay(2000);
+        ServoDriver.setPWM(Interaction_State, 0, C_SERVOSTOP);
+      } else {
+        myStepper.step(stepsPerRevolution*2);
+        delay(1000);
+      }
       delay(50);
     } else {
       Serial.println("Return of Key: Increase");
@@ -111,7 +125,7 @@ void loop() {
       screenWrite(1, 20);
       screenWrite(2, 11);
       screenWrite(3, Interaction_State);
-    }
+      }
 
       delay (50);
     } else {
@@ -120,8 +134,32 @@ void loop() {
   }
   oldCMState = CMState;
 
+  if (SaveState != oldSaveState){
+    if (CMState == HIGH){
+      Serial.println("Pressed Save Mode");
+      Motors[Interaction_State][1] = Motors[Interaction_State][0];
 
-  int_to_individualDigits(Motors[Interaction_State]);
+      for (int n = 0; n < 100; n++){
+        screenWrite(0, 17);
+        screenWrite(1, 10);
+        screenWrite(2, 18);
+        screenWrite(3, 14);
+      }
+      for (int n = 0; n < 100; n++){
+        screenWrite(0, 19);
+        screenWrite(1, 20);
+        screenWrite(2, 11);
+        screenWrite(3, Interaction_State);
+      }
+
+      delay(50);
+    } else {
+      Serial.println("Return of Key: Save Mode");
+    }
+  }
+  oldSaveState = SaveState;
+
+  int_to_individualDigits(Motors[Interaction_State][0]);
   
   for (int n = 0; n < 25; n++){
     screenWrite(0, Output[3]);
@@ -198,7 +236,7 @@ int decimal_to_7segment(int x){
     // negative sign
     case 16 : SegmentData = 0b01000000; break;
     // alphabets S, V, L, N
-    case 17 : SegmentData = 0b01110001; break;
+    case 17 : SegmentData = 0b01101101; break;
     case 18 : SegmentData = 0b00111110; break;
     case 19 : SegmentData = 0b00111000; break;
     case 20 : SegmentData = 0b00110111; break;
